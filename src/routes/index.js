@@ -8,6 +8,7 @@ import CreateWorkout from '../pages/admin/CreateWorkout';
 import EditWorkout from '../pages/admin/EditWorkout';
 import { AppRoutes } from './app.routes';
 import ImageViewer from '../pages/ImageViewer';
+import TreinoModelo from '../pages/admin/TreinoModelo';
 
 const Stack = createNativeStackNavigator();
 
@@ -38,6 +39,7 @@ export default function Routes() {
                 <Stack.Screen name="CreateWorkout" component={CreateWorkout} />
                 <Stack.Screen name="EditWorkout" component={EditWorkout} />
                 <Stack.Screen name="ImageViewer" component={ImageViewer} />
+                <Stack.Screen name="TreinoModelo" component={TreinoModelo} />
             </Stack.Group>
         </Stack.Navigator>
     );

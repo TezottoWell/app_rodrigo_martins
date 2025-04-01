@@ -28,7 +28,27 @@ export default function EditWorkout() {
   const [exerciciosCombinados, setExerciciosCombinados] = useState([]);
   const [isEditingCombinado, setIsEditingCombinado] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showRepetirForm, setShowRepetirForm] = useState(false);
+  const [diaOrigem, setDiaOrigem] = useState('');
+  const [diaDestino, setDiaDestino] = useState('');
+  const [isOrigemDropdownOpen, setIsOrigemDropdownOpen] = useState(false);
+  const [isDestinoDropdownOpen, setIsDestinoDropdownOpen] = useState(false);
   const navigation = useNavigation();
+
+  // Adicione a mesma função getDiaSemana
+  const getDiaSemana = (numero) => {
+    const diasSemana = {
+      1: 'Segunda-Feira',
+      2: 'Terça-Feira',
+      3: 'Quarta-Feira',
+      4: 'Quinta-Feira',
+      5: 'Sexta-Feira',
+      6: 'Sábado',
+      7: 'Domingo'
+    };
+    return diasSemana[numero];
+  };
 
   // Buscar usuários (igual à tela CreateWorkout)
   async function searchUsers(text) {
@@ -86,21 +106,34 @@ export default function EditWorkout() {
 
   // Adicionar novo exercício ao dia
   function addExercicio() {
-    if (!novoExercicio.grupamentoMuscular || !novoExercicio.nome || !novoExercicio.repeticoes || !novoExercicio.series) {
+    if (isCombinado) {
+      addExercicioCombinado();
+      return;
+    }
+
+    const camposObrigatorios = ['grupamentoMuscular', 'nome', 'repeticoes'];
+    if (novoExercicio.grupamentoMuscular !== 'Cardio') {
+      camposObrigatorios.push('series');
+    }
+
+    const camposVazios = camposObrigatorios.filter(campo => !novoExercicio[campo]);
+    if (camposVazios.length > 0) {
       Alert.alert('Atenção', 'Preencha todos os campos obrigatórios');
       return;
     }
 
-    // Cria uma cópia do exercício para evitar referências
-    const exercicioParaAdicionar = { ...novoExercicio };
+    const exercicioParaAdicionar = {
+      ...novoExercicio,
+      series: novoExercicio.grupamentoMuscular === 'Cardio' ? '1' : novoExercicio.series
+    };
 
-    // Adiciona o exercício ao dia atual
     setTreinosPorDia(prev => ({
       ...prev,
       [diaAtual]: [...(prev[diaAtual] || []), exercicioParaAdicionar]
     }));
+    
+    setHasUnsavedChanges(true);
 
-    // Limpa o formulário
     setNovoExercicio({
       grupamentoMuscular: '',
       nome: '',
@@ -114,11 +147,50 @@ export default function EditWorkout() {
   }
 
   // Remover exercício
-  function removeExercicio(diaIndex, exercicioIndex) {
-    setTreinosPorDia(prev => ({
-      ...prev,
-      [diaIndex]: prev[diaIndex].filter((_, index) => index !== exercicioIndex)
-    }));
+  function removeExercicio(dia, exercicioIndex) {
+    Alert.alert(
+      'Confirmar Exclusão',
+      'Deseja realmente excluir este exercício?',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel'
+        },
+        {
+          text: 'Excluir',
+          onPress: async () => {
+            try {
+              // Cria uma cópia profunda do objeto treinosPorDia
+              const novosTreinos = JSON.parse(JSON.stringify(treinosPorDia));
+              
+              // Remove o exercício do array do dia específico
+              novosTreinos[dia] = novosTreinos[dia].filter((_, index) => index !== exercicioIndex);
+              
+              // Atualiza o estado local
+              setTreinosPorDia(novosTreinos);
+              setHasUnsavedChanges(true);
+
+              // Atualiza o banco de dados
+              await updateDoc(doc(db, 'treinos', selectedWorkout.id), {
+                treinos: novosTreinos
+              });
+
+              // Atualiza o selectedWorkout
+              setSelectedWorkout(prev => ({
+                ...prev,
+                treinos: novosTreinos
+              }));
+
+              Alert.alert('Sucesso', 'Exercício excluído com sucesso!');
+            } catch (error) {
+              console.error(error);
+              Alert.alert('Erro', 'Erro ao excluir exercício');
+            }
+          },
+          style: 'destructive'
+        }
+      ]
+    );
   }
 
   // Salvar alterações
@@ -128,18 +200,16 @@ export default function EditWorkout() {
         treinos: treinosPorDia
       });
 
-      // Atualiza o selectedWorkout com os novos treinos
       setSelectedWorkout(prev => ({
         ...prev,
         treinos: treinosPorDia
       }));
 
+      setHasUnsavedChanges(false);
       Alert.alert('Sucesso', 'Treino atualizado com sucesso!');
       
-      // Atualiza a lista de treinos
       await fetchUserWorkouts(selectedUser.id);
       
-      // Volta para a seleção de dias
       setDiaAtual(null);
     } catch (error) {
       Alert.alert('Erro', 'Erro ao atualizar treino');
@@ -236,7 +306,7 @@ export default function EditWorkout() {
             <Text style={[
               styles.diaButtonText,
               diaAtual === dia && styles.diaButtonTextSelected
-            ]}>Dia {dia}</Text>
+            ]}>{getDiaSemana(dia)}</Text>
             {treinosPorDia[dia]?.length > 0 && (
               <Text style={styles.exerciciosCount}>
                 {treinosPorDia[dia].length} exercício(s)
@@ -245,71 +315,241 @@ export default function EditWorkout() {
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* Botão Repetir Treino */}
+      <TouchableOpacity
+        style={styles.repetirButton}
+        onPress={() => setShowRepetirForm(true)}
+      >
+        <MaterialIcons name="content-copy" size={24} color="#FFF" />
+        <Text style={styles.buttonText}>Repetir Treino</Text>
+      </TouchableOpacity>
+
+      {/* Modal/Formulário de Repetir Treino */}
+      {showRepetirForm && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.repetirFormContainer}>
+            <View style={styles.repetirFormContent}>
+              <Text style={styles.repetirFormTitle}>Repetir Treino</Text>
+              
+              <View style={styles.repetirFormField}>
+                <Text style={styles.repetirFormLabel}>Copiar dia de:</Text>
+                <TouchableOpacity 
+                  style={styles.dropdownButton}
+                  onPress={() => {
+                    setIsOrigemDropdownOpen(!isOrigemDropdownOpen);
+                    setIsDestinoDropdownOpen(false);
+                  }}
+                >
+                  <Text style={styles.dropdownButtonText}>
+                    {diaOrigem ? getDiaSemana(Number(diaOrigem)) : "Selecione o dia de origem"}
+                  </Text>
+                  <MaterialIcons 
+                    name={isOrigemDropdownOpen ? "keyboard-arrow-up" : "keyboard-arrow-down"} 
+                    size={24} 
+                    color="#666" 
+                  />
+                </TouchableOpacity>
+
+                {isOrigemDropdownOpen && (
+                  <View style={styles.dropdownList}>
+                    <ScrollView 
+                      style={styles.dropdownScroll}
+                      nestedScrollEnabled={true}
+                      showsVerticalScrollIndicator={true}
+                    >
+                      {Object.keys(treinosPorDia)
+                        .filter(dia => treinosPorDia[dia]?.length > 0)
+                        .map((dia) => (
+                          <TouchableOpacity
+                            key={`origem-${dia}`}
+                            style={styles.dropdownItem}
+                            onPress={() => {
+                              setDiaOrigem(dia);
+                              setIsOrigemDropdownOpen(false);
+                            }}
+                          >
+                            <Text style={[
+                              styles.dropdownItemText,
+                              diaOrigem === dia && styles.dropdownItemSelected
+                            ]}>
+                              {getDiaSemana(Number(dia))}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.repetirFormFieldSecond}>
+                <Text style={styles.repetirFormLabel}>Atribuir a:</Text>
+                <TouchableOpacity 
+                  style={styles.dropdownButton}
+                  onPress={() => {
+                    setIsDestinoDropdownOpen(!isDestinoDropdownOpen);
+                    setIsOrigemDropdownOpen(false);
+                  }}
+                >
+                  <Text style={styles.dropdownButtonText}>
+                    {diaDestino ? getDiaSemana(Number(diaDestino)) : "Selecione o dia de destino"}
+                  </Text>
+                  <MaterialIcons 
+                    name={isDestinoDropdownOpen ? "keyboard-arrow-up" : "keyboard-arrow-down"} 
+                    size={24} 
+                    color="#666" 
+                  />
+                </TouchableOpacity>
+
+                {isDestinoDropdownOpen && (
+                  <View style={styles.dropdownList}>
+                    <ScrollView 
+                      style={styles.dropdownScroll}
+                      nestedScrollEnabled={true}
+                      showsVerticalScrollIndicator={true}
+                    >
+                      {Array.from({ length: selectedWorkout.frequenciaTreino }, (_, i) => (i + 1).toString())
+                        .filter(dia => dia !== diaOrigem)
+                        .map((dia) => (
+                          <TouchableOpacity
+                            key={`destino-${dia}`}
+                            style={styles.dropdownItem}
+                            onPress={() => {
+                              setDiaDestino(dia);
+                              setIsDestinoDropdownOpen(false);
+                            }}
+                          >
+                            <Text style={[
+                              styles.dropdownItemText,
+                              diaDestino === dia && styles.dropdownItemSelected
+                            ]}>
+                              {getDiaSemana(Number(dia))}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.repetirFormButtons}>
+                <TouchableOpacity 
+                  style={[styles.repetirFormButton, styles.repetirFormButtonCancel]}
+                  onPress={() => {
+                    setShowRepetirForm(false);
+                    setDiaOrigem('');
+                    setDiaDestino('');
+                    setIsOrigemDropdownOpen(false);
+                    setIsDestinoDropdownOpen(false);
+                  }}
+                >
+                  <Text style={styles.buttonText}>Cancelar</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.repetirFormButton, styles.repetirFormButtonConfirm]}
+                  onPress={handleRepetirTreino}
+                >
+                  <Text style={styles.buttonText}>Confirmar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 
-  // Adicione a função renderGrupamentoDropdown
-  const renderGrupamentoDropdown = () => {
-    const opcoes = [
-      { label: "Selecione o grupamento muscular", value: "" },
-      { label: "Peito", value: "Peito" },
-      { label: "Costas", value: "Costas" },
-      { label: "Ombro", value: "Ombro" },
-      { label: "Trapézio", value: "Trapézio" },
-      { label: "Biceps", value: "Biceps" },
-      { label: "Triceps", value: "Triceps" },
-      { label: "Perna", value: "Perna" },
-      { label: "Gluteo", value: "Gluteo" },
-      { label: "Panturrilha", value: "Panturrilha" },
-      { label: "Abdomen", value: "Abdomen" },
-      { label: "Cardio", value: "Cardio" }
-    ];
+  // Adicione esta função para copiar os exercícios
+  const handleRepetirTreino = () => {
+    if (!diaOrigem || !diaDestino) {
+      Alert.alert('Atenção', 'Selecione os dias de origem e destino');
+      return;
+    }
 
-    return (
-      <View style={styles.dropdownContainer}>
-        <TouchableOpacity 
-          style={styles.dropdownButton}
-          onPress={() => setIsDropdownOpen(!isDropdownOpen)}
-        >
-          <Text style={styles.dropdownButtonText}>
-            {novoExercicio.grupamentoMuscular || "Selecione o grupamento muscular"}
-          </Text>
-          <MaterialIcons 
-            name={isDropdownOpen ? "keyboard-arrow-up" : "keyboard-arrow-down"} 
-            size={24} 
-            color="#666" 
-          />
-        </TouchableOpacity>
+    if (diaOrigem === diaDestino) {
+      Alert.alert('Atenção', 'Os dias de origem e destino devem ser diferentes');
+      return;
+    }
 
-        {isDropdownOpen && (
-          <View style={styles.dropdownList}>
-            <ScrollView 
-              style={styles.dropdownScroll}
-              nestedScrollEnabled={true}
-              showsVerticalScrollIndicator={true}
-            >
-              {opcoes.map((opcao) => (
-                <TouchableOpacity
-                  key={opcao.value}
-                  style={styles.dropdownItem}
-                  onPress={() => {
-                    setNovoExercicio({...novoExercicio, grupamentoMuscular: opcao.value});
-                    setIsDropdownOpen(false);
-                  }}
-                >
-                  <Text style={[
-                    styles.dropdownItemText,
-                    novoExercicio.grupamentoMuscular === opcao.value && styles.dropdownItemSelected
-                  ]}>
-                    {opcao.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-      </View>
-    );
+    if (!treinosPorDia[diaOrigem]?.length) {
+      Alert.alert('Atenção', 'O dia de origem não possui exercícios');
+      return;
+    }
+
+    // Verifica se já existem exercícios no dia de destino
+    if (treinosPorDia[diaDestino]?.length > 0) {
+      Alert.alert(
+        'Atenção',
+        `${getDiaSemana(Number(diaDestino))} já possui exercícios. Deseja substituí-los?`,
+        [
+          {
+            text: 'Cancelar',
+            style: 'cancel'
+          },
+          {
+            text: 'Substituir',
+            onPress: () => copiarExercicios(),
+            style: 'destructive'
+          }
+        ]
+      );
+    } else {
+      Alert.alert(
+        'Confirmar',
+        `Deseja copiar os exercícios de ${getDiaSemana(Number(diaOrigem))} para ${getDiaSemana(Number(diaDestino))}?`,
+        [
+          {
+            text: 'Cancelar',
+            style: 'cancel'
+          },
+          {
+            text: 'Confirmar',
+            onPress: () => copiarExercicios()
+          }
+        ]
+      );
+    }
+  };
+
+  // Função auxiliar para copiar os exercícios
+  const copiarExercicios = async () => {
+    try {
+      setTreinosPorDia(prev => ({
+        ...prev,
+        [diaDestino]: [...treinosPorDia[diaOrigem]]
+      }));
+      
+      setHasUnsavedChanges(true);
+      
+      // Salva as alterações automaticamente
+      await updateDoc(doc(db, 'treinos', selectedWorkout.id), {
+        treinos: {
+          ...treinosPorDia,
+          [diaDestino]: [...treinosPorDia[diaOrigem]]
+        }
+      });
+
+      setShowRepetirForm(false);
+      setDiaOrigem('');
+      setDiaDestino('');
+      Alert.alert('Sucesso', 'Exercícios copiados e salvos com sucesso!');
+      
+      // Atualiza o selectedWorkout com os novos treinos
+      setSelectedWorkout(prev => ({
+        ...prev,
+        treinos: {
+          ...treinosPorDia,
+          [diaDestino]: [...treinosPorDia[diaOrigem]]
+        }
+      }));
+      
+      // Atualiza a lista de treinos
+      await fetchUserWorkouts(selectedUser.id);
+    } catch (error) {
+      Alert.alert('Erro', 'Não foi possível salvar as alterações');
+      console.error(error);
+    }
   };
 
   // Renderização do formulário de exercício
@@ -379,16 +619,35 @@ export default function EditWorkout() {
           />
           <TextInput
             style={styles.input}
-            placeholder="Repetições (ex: 8-12, 15)"
+            placeholder={['Mobilidade', 'Cardio'].includes(novoExercicio.grupamentoMuscular) 
+              ? 'Tempo (ex: 30s)' 
+              : 'Repetições (ex: 8-12, 15)'}
+            placeholderTextColor={'#666'}
             value={novoExercicio.repeticoes}
             onChangeText={(text) => setNovoExercicio({...novoExercicio, repeticoes: text})}
+            returnKeyType="next"
+            autoCorrect={true}
+            autoCapitalize="none"
+            keyboardType="default"
+            locale="pt-BR"
+            textContentType="none"
           />
           <TextInput
-            style={styles.input}
-            placeholder="Séries"
-            keyboardType="numeric"
+            style={[
+              styles.input,
+              novoExercicio.grupamentoMuscular === 'Cardio' && styles.inputDisabled
+            ]}
+            placeholder="Séries (ex: 3)"
+            placeholderTextColor={'#666'}
             value={novoExercicio.series}
             onChangeText={(text) => setNovoExercicio({...novoExercicio, series: text})}
+            editable={novoExercicio.grupamentoMuscular !== 'Cardio'}
+            returnKeyType="next"
+            autoCorrect={true}
+            autoCapitalize="none"
+            keyboardType="numeric"
+            locale="pt-BR"
+            textContentType="none"
           />
           <TextInput
             style={[styles.input, styles.observacaoInput]}
@@ -504,7 +763,7 @@ export default function EditWorkout() {
                       <Text style={styles.grupamentoText}>{exercicio.grupamentoMuscular}</Text>
                       <Text style={styles.exercicioNome}>{exercicio.nome}</Text>
                       <Text style={styles.exercicioDetalhes}>
-                        {exercicio.series}x{exercicio.repeticoes}
+                        {exercicio.grupamentoMuscular === 'Mobilidade' ? 'Tempo' : 'Repetições'}: {exercicio.repeticoes}
                       </Text>
                       {exercicio.observacao && (
                         <Text style={styles.observacaoText}>Obs: {exercicio.observacao}</Text>
@@ -534,14 +793,16 @@ export default function EditWorkout() {
                     </TouchableOpacity>
                     <TouchableOpacity 
                       style={styles.removeButton}
-                      onPress={() => removeExercicio(index)}
+                      onPress={() => removeExercicio(diaAtual.toString(), index)}
                     >
                       <MaterialIcons name="delete" size={24} color="#ff4444" />
                     </TouchableOpacity>
                   </View>
                 </View>
                 <Text style={styles.exercicioNome}>{item.nome}</Text>
-                <Text>{item.series} séries x {item.repeticoes} repetições</Text>
+                <Text style={styles.exercicioDetalhes}>
+                  {item.grupamentoMuscular === 'Mobilidade' ? 'Tempo' : 'Repetições'}: {item.repeticoes}
+                </Text>
                 {item.observacao && (
                   <Text style={styles.observacaoText}>Obs: {item.observacao}</Text>
                 )}
@@ -713,20 +974,118 @@ export default function EditWorkout() {
     });
   }
 
+  // Adicione a função renderGrupamentoDropdown
+  const renderGrupamentoDropdown = () => {
+    const opcoes = [
+      { label: "Selecione o grupamento muscular", value: "" },
+      { label: "Peito", value: "Peito" },
+      { label: "Costas", value: "Costas" },
+      { label: "Ombro", value: "Ombro" },
+      { label: "Trapézio", value: "Trapézio" },
+      { label: "Biceps", value: "Biceps" },
+      { label: "Triceps", value: "Triceps" },
+      { label: "Membros Inferiores", value: "Membros Inferiores" },
+      { label: "Abdomen", value: "Abdomen" },
+      { label: "Cardio", value: "Cardio" },
+      { label: "Mobilidade", value: "Mobilidade" }
+    ];
+
+    return (
+      <View style={styles.dropdownContainer}>
+        <TouchableOpacity 
+          style={styles.dropdownButton}
+          onPress={() => setIsDropdownOpen(!isDropdownOpen)}
+        >
+          <Text style={styles.dropdownButtonText}>
+            {novoExercicio.grupamentoMuscular || "Selecione o grupamento muscular"}
+          </Text>
+          <MaterialIcons 
+            name={isDropdownOpen ? "keyboard-arrow-up" : "keyboard-arrow-down"} 
+            size={24} 
+            color="#666" 
+          />
+        </TouchableOpacity>
+
+        {isDropdownOpen && (
+          <View style={styles.dropdownList}>
+            <ScrollView 
+              style={styles.dropdownScroll}
+              nestedScrollEnabled={true}
+              showsVerticalScrollIndicator={true}
+            >
+              {opcoes.map((opcao) => (
+                <TouchableOpacity
+                  key={opcao.value}
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    setNovoExercicio({...novoExercicio, grupamentoMuscular: opcao.value});
+                    setIsDropdownOpen(false);
+                  }}
+                >
+                  <Text style={[
+                    styles.dropdownItemText,
+                    novoExercicio.grupamentoMuscular === opcao.value && styles.dropdownItemSelected
+                  ]}>
+                    {opcao.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
           onPress={() => {
+            // Se estiver na tela de exercícios (diaAtual está definido)
             if (diaAtual) {
-              setDiaAtual(null); // Volta para seleção de dias
-            } else if (selectedWorkout) {
-              setSelectedWorkout(null); // Volta para lista de treinos
-            } else if (selectedUser) {
-              setSelectedUser(null); // Volta para seleção de usuário
-            } else {
-              navigation.goBack(); // Volta para tela anterior
+              if (hasUnsavedChanges) {
+                Alert.alert(
+                  'Alterações não salvas',
+                  'Existem alterações não salvas. O que você deseja fazer?',
+                  [
+                    {
+                      text: 'Salvar',
+                      onPress: async () => {
+                        await salvarAlteracoes();
+                        setDiaAtual(null);
+                      }
+                    },
+                    {
+                      text: 'Descartar',
+                      onPress: () => {
+                        setHasUnsavedChanges(false);
+                        setDiaAtual(null);
+                      },
+                      style: 'destructive'
+                    },
+                    {
+                      text: 'Cancelar',
+                      style: 'cancel'
+                    }
+                  ]
+                );
+              } else {
+                setDiaAtual(null);
+              }
+            } 
+            // Se estiver na tela de seleção de dias (selectedWorkout está definido)
+            else if (selectedWorkout) {
+              setSelectedWorkout(null);
+            } 
+            // Se estiver na tela de seleção de usuário
+            else if (selectedUser) {
+              setSelectedUser(null);
+            } 
+            // Se estiver na tela inicial
+            else {
+              navigation.goBack();
             }
           }}
         >
@@ -1224,10 +1583,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderWidth: 1.5,
     borderColor: '#dce0e6',
-    borderRadius: 20,
-    padding: 18,
+    borderRadius: 8,
+    padding: 15,
     backgroundColor: '#FFF',
-    minHeight: 55,
+    minHeight: 50,
   },
   dropdownButtonText: {
     fontSize: 16,
@@ -1239,7 +1598,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: '#FFF',
-    borderRadius: 12,
+    borderRadius: 8,
     marginTop: 5,
     padding: 5,
     borderWidth: 1,
@@ -1253,6 +1612,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
     maxHeight: 150,
+    zIndex: 1000,
   },
   dropdownScroll: {
     width: '100%',
@@ -1268,5 +1628,93 @@ const styles = StyleSheet.create({
   dropdownItemSelected: {
     color: '#28a745',
     fontWeight: 'bold',
+  },
+  repetirButton: {
+    backgroundColor: '#1a1a1a',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 15,
+    borderRadius: 8,
+    marginTop: 20,
+    marginBottom: 20,
+    marginHorizontal: 20,
+    elevation: 2,
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
+    zIndex: 9999,
+  },
+  repetirFormContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    width: '100%',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  repetirFormContent: {
+    width: '100%',
+    position: 'relative',
+    zIndex: 1,
+  },
+  repetirFormField: {
+    marginBottom: 20,
+    position: 'relative',
+    zIndex: 3,
+  },
+  repetirFormFieldSecond: {
+    marginBottom: 20,
+    position: 'relative',
+    zIndex: 2,
+  },
+  repetirFormTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  repetirFormLabel: {
+    fontSize: 16,
+    marginBottom: 5,
+    color: '#666',
+  },
+  repetirFormButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+    gap: 10,
+    position: 'relative',
+    zIndex: 1,
+  },
+  repetirFormButton: {
+    flex: 1,
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    elevation: 2,
+  },
+  repetirFormButtonCancel: {
+    backgroundColor: '#666',
+  },
+  repetirFormButtonConfirm: {
+    backgroundColor: '#28a745',
+  },
+  inputDisabled: {
+    backgroundColor: '#f5f5f5',
+    color: '#999',
   },
 }); 

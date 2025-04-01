@@ -1,62 +1,31 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, ActivityIndicator } from 'react-native';
-import { FontAwesome5 } from '@expo/vector-icons';
-import { useEffect, useRef, useState, useCallback } from 'react';
-import * as Linking from 'expo-linking';
-import { auth, db } from '../../config/firebase';
-import { collection, query, where, onSnapshot, doc, getDocs, addDoc } from 'firebase/firestore';
-import { Alert } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { CommonActions } from '@react-navigation/native';
-import { signOut } from 'firebase/auth';
+import { FontAwesome5 } from '@expo/vector-icons';
+import { auth, db } from '../../config/firebase';
+import { collection, query, where, getDocs, addDoc, onSnapshot, doc } from 'firebase/firestore';
+import { useNavigation } from '@react-navigation/native';
+import * as Linking from 'expo-linking';
+import Logger from '../../utils/logger';
 
 export default function Financeiro() {
   const navigation = useNavigation();
-  const shakeAnimation = useRef(new Animated.Value(0)).current;
   const [isLoading, setIsLoading] = useState(true);
   const [userData, setUserData] = useState(null);
   const [solicitacaoEnviada, setSolicitacaoEnviada] = useState(false);
-
-  const startShakeAnimation = () => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(shakeAnimation, {
-          toValue: 5,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(shakeAnimation, {
-          toValue: -5,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(shakeAnimation, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]),
-      { iterations: -1 }
-    ).start();
-  };
+  const [showInfo, setShowInfo] = useState(false);
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const heightAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!auth.currentUser) {
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: 'Welcome' }],
-        })
-      );
+      navigation.goBack();
       return;
     }
 
-    let unsubscribeUser;
-
     const loadData = async () => {
       try {
-        // Verificar se já existe uma solicitação pendente
+        // Verificar solicitações pendentes
         const solicitacoesRef = collection(db, 'solicitacoes');
         const q = query(
           solicitacoesRef,
@@ -67,8 +36,8 @@ export default function Financeiro() {
         const querySnapshot = await getDocs(q);
         setSolicitacaoEnviada(!querySnapshot.empty);
 
-        // Monitorar apenas os dados do usuário
-        unsubscribeUser = onSnapshot(
+        // Monitorar dados do usuário
+        const unsubscribe = onSnapshot(
           doc(db, 'users', auth.currentUser.uid),
           (docSnapshot) => {
             if (docSnapshot.exists()) {
@@ -76,12 +45,14 @@ export default function Financeiro() {
             }
           },
           (error) => {
+            Logger.error('Erro ao carregar dados do usuário', error);
             Alert.alert('Erro', 'Não foi possível carregar seus dados');
           }
         );
 
-        startShakeAnimation();
+        return () => unsubscribe();
       } catch (error) {
+        Logger.error('Erro ao carregar dados', error);
         Alert.alert('Erro', 'Não foi possível carregar os dados');
       } finally {
         setIsLoading(false);
@@ -89,20 +60,23 @@ export default function Financeiro() {
     };
 
     loadData();
+  }, []);
 
-    return () => {
-      if (unsubscribeUser) unsubscribeUser();
-    };
-  }, [navigation]);
-
-  useFocusEffect(
-    React.useCallback(() => {
-      navigation.setOptions({
-        gestureEnabled: false,
-        headerLeft: null,
-      });
-    }, [])
-  );
+  const toggleInfo = () => {
+    setShowInfo(!showInfo);
+    Animated.parallel([
+      Animated.timing(rotateAnim, {
+        toValue: showInfo ? 0 : 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(heightAnim, {
+        toValue: showInfo ? 0 : 1,
+        duration: 300,
+        useNativeDriver: false,
+      }),
+    ]).start();
+  };
 
   const handleSolicitacao = async () => {
     if (solicitacaoEnviada) return;
@@ -121,29 +95,26 @@ export default function Financeiro() {
       setSolicitacaoEnviada(true);
       Alert.alert('Sucesso', 'Solicitação enviada com sucesso!');
     } catch (error) {
+      Logger.error('Erro ao enviar solicitação', error);
       Alert.alert('Erro', 'Não foi possível enviar a solicitação');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const abrirWhatsapp = () => {
-    Linking.openURL('https://wa.me/5511999999999');
+  const handleContactPress = () => {
+    Linking.openURL('https://api.whatsapp.com/send?phone=5514997121314');
   };
 
-  const handleLogout = useCallback(async () => {
-    try {
-      await signOut(auth);
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: 'Welcome' }],
-        })
-      );
-    } catch (error) {
-      Alert.alert('Erro', 'Não foi possível fazer logout');
-    }
-  }, [navigation]);
+  const rotate = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+
+  const maxHeight = heightAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1000],
+  });
 
   if (isLoading) {
     return (
@@ -153,25 +124,55 @@ export default function Financeiro() {
     );
   }
 
-  const HeaderComponent = React.memo(() => (
-    <View style={styles.headerContent}>
-      <Text style={styles.headerTitle}>Área Financeira</Text>
-      <TouchableOpacity 
-        style={styles.logoutButton}
-        onPress={handleLogout}
-      >
-        <MaterialIcons name="logout" size={24} color="#FFF" />
-      </TouchableOpacity>
-    </View>
-  ));
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <HeaderComponent />
+        <Text style={styles.headerTitle}>Financeiro</Text>
       </View>
-      
-      <View style={styles.content}>
+
+      <ScrollView style={styles.content}>
+        {/* Dropdown de Informações */}
+        <TouchableOpacity 
+          style={styles.infoHeader}
+          onPress={toggleInfo}
+        >
+          <Text style={styles.infoHeaderText}>Informações do Plano</Text>
+          <Animated.View style={{ transform: [{ rotate }] }}>
+            <MaterialIcons name="keyboard-arrow-down" size={24} color="#1a1a1a" />
+          </Animated.View>
+        </TouchableOpacity>
+
+        <Animated.View style={[styles.infoContent, { maxHeight }]}>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Como Funciona</Text>
+            <Text style={styles.text}>
+              O Team Rodrigo Martins é um aplicativo exclusivo para alunos que possuem consultoria ativa com o Personal Trainer Rodrigo Martins.
+            </Text>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Recursos Disponíveis</Text>
+            <Text style={styles.text}>
+              • Treinos personalizados{'\n'}
+              • Acompanhamento de peso{'\n'}
+              • Controle de hidratação{'\n'}
+              • Contador de passos{'\n'}
+              • Cronômetro de treino
+            </Text>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Observações Importantes</Text>
+            <Text style={styles.text}>
+              • O app não possui compras dentro do aplicativo{'\n'}
+              • Todo o conteúdo é desbloqueado ao contratar a consultoria presencial{'\n'}
+              • O acesso é automaticamente suspenso ao término da consultoria{'\n'}
+              • Para renovar o acesso, basta renovar sua consultoria presencial
+            </Text>
+          </View>
+        </Animated.View>
+
+        {/* Status do Plano */}
         {userData?.planoAtivo ? (
           <View style={styles.planoAtivoContainer}>
             <MaterialIcons name="check-circle" size={64} color="#4CAF50" />
@@ -179,49 +180,33 @@ export default function Financeiro() {
             <Text style={styles.planoAtivoText}>
               Seu plano está ativo e você tem acesso a todos os recursos do aplicativo.
             </Text>
-            <TouchableOpacity 
-              style={styles.voltarButton}
-              onPress={() => navigation.navigate('Home')}
-            >
-              <Text style={styles.voltarButtonText}>Voltar</Text>
-            </TouchableOpacity>
           </View>
         ) : (
-          <>
+          <View style={styles.planoInativoContainer}>
             <Text style={styles.description}>
               Para ter acesso a todos os recursos do aplicativo, entre em contato via WhatsApp ou solicite a liberação do app.
             </Text>
 
             <TouchableOpacity 
-              style={styles.whatsappButton} 
-              onPress={abrirWhatsapp}
+              style={styles.whatsappButton}
+              onPress={handleContactPress}
             >
               <FontAwesome5 name="whatsapp" size={24} color="#FFF" />
               <Text style={styles.buttonText}>Contato via WhatsApp</Text>
             </TouchableOpacity>
 
-            <Animated.View
-              style={[
-                styles.liberacaoButton,
-                { transform: [{ translateX: shakeAnimation }] },
-                solicitacaoEnviada && styles.buttonDisabled
-              ]}
+            <TouchableOpacity 
+              style={[styles.solicitarButton, solicitacaoEnviada && styles.buttonDisabled]}
+              onPress={handleSolicitacao}
+              disabled={solicitacaoEnviada}
             >
-              <TouchableOpacity 
-                onPress={handleSolicitacao} 
-                disabled={isLoading || solicitacaoEnviada}
-                style={styles.liberacaoButtonInner}
-              >
-                <Text style={styles.buttonText}>
-                  {isLoading ? 'Enviando...' : 
-                   solicitacaoEnviada ? 'Solicitação enviada' : 
-                   'Solicitar liberação do app'}
-                </Text>
-              </TouchableOpacity>
-            </Animated.View>
-          </>
+              <Text style={styles.buttonText}>
+                {solicitacaoEnviada ? 'Solicitação enviada' : 'Solicitar liberação do app'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -229,114 +214,115 @@ export default function Financeiro() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#1a1a1a',
   },
   header: {
-    backgroundColor: '#1a1a1a',
     padding: 20,
     paddingTop: 40,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
   },
   headerTitle: {
-    color: '#FFF',
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
-    flex: 1,
-    textAlign: 'center',
-  },
-  logoutButton: {
-    padding: 8,
-    position: 'absolute',
-    right: 0,
+    color: '#FFF',
   },
   content: {
     flex: 1,
-    padding: 20,
+    backgroundColor: '#f5f5f5',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    paddingTop: 20,
   },
-  description: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 30,
-    lineHeight: 24,
-  },
-  whatsappButton: {
+  infoHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#25D366',
-    padding: 15,
-    borderRadius: 8,
-    justifyContent: 'center',
-    marginBottom: 20,
-    gap: 10,
+    backgroundColor: '#FFF',
+    padding: 20,
+    marginHorizontal: 15,
+    borderRadius: 15,
+    marginBottom: 10,
   },
-  liberacaoButton: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 8,
-    marginTop: 10,
+  infoHeaderText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
   },
-  liberacaoButtonInner: {
-    padding: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
+  infoContent: {
+    overflow: 'hidden',
   },
-  buttonText: {
-    color: '#FFF',
+  section: {
+    backgroundColor: '#FFF',
+    margin: 15,
+    marginTop: 0,
+    padding: 20,
+    borderRadius: 15,
+  },
+  sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#1a1a1a',
+  },
+  text: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 24,
   },
   planoAtivoContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
     backgroundColor: '#FFF',
-    borderRadius: 12,
-    elevation: 3,
+    margin: 15,
+    padding: 20,
+    borderRadius: 15,
+    alignItems: 'center',
   },
   planoAtivoTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#4CAF50',
-    marginTop: 20,
-    marginBottom: 10,
+    marginTop: 10,
   },
   planoAtivoText: {
     fontSize: 16,
-    textAlign: 'center',
     color: '#666',
-    marginBottom: 30,
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  planoInativoContainer: {
+    backgroundColor: '#FFF',
+    margin: 15,
+    padding: 20,
+    borderRadius: 15,
+  },
+  description: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
     lineHeight: 24,
   },
-  voltarButton: {
+  whatsappButton: {
+    backgroundColor: '#25D366',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  solicitarButton: {
     backgroundColor: '#1a1a1a',
     padding: 15,
     borderRadius: 8,
-    width: '100%',
     alignItems: 'center',
   },
-  voltarButtonText: {
+  buttonText: {
     color: '#FFF',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    marginLeft: 8,
   },
   buttonDisabled: {
-    opacity: 0.7,
     backgroundColor: '#666',
+    opacity: 0.7,
   },
 }); 

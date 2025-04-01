@@ -15,10 +15,12 @@ import WeightTracker from '../../components/WeightTracker';
 import * as ImagePicker from 'expo-image-picker';
 import { CommonActions } from '@react-navigation/native';
 import Logger from '../../utils/logger';
+import { useAuth } from '../../contexts/auth';
 
 
 export default function Home() {
   const navigation = useNavigation();
+  const { deleteAccount } = useAuth();
   const [userData, setUserData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -162,6 +164,36 @@ export default function Home() {
     }
   };
 
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Excluir Conta',
+      'Tem certeza que deseja excluir sua conta? Esta ação não pode ser desfeita e todos os seus dados serão permanentemente removidos.',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel'
+        },
+        {
+          text: 'Sim, excluir',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteAccount();
+              navigation.dispatch(
+                CommonActions.reset({
+                  index: 0,
+                  routes: [{ name: 'Welcome' }],
+                })
+              );
+            } catch (error) {
+              Alert.alert('Erro', 'Não foi possível excluir sua conta. Tente novamente.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   if (isLoading) {
     return (
       <View style={styles.container}>
@@ -230,9 +262,11 @@ export default function Home() {
               {userData?.email || auth.currentUser?.email}
             </Text>
           </View>
-          <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-            <MaterialIcons name="logout" size={24} color="#FFF" />
-          </TouchableOpacity>
+          <View style={styles.userActions}>
+            <TouchableOpacity onPress={handleLogout} style={styles.actionButton}>
+              <MaterialIcons name="logout" size={24} color="#FFF" />
+            </TouchableOpacity>
+          </View>
         </View>
       </Animatable.View>
 
@@ -383,5 +417,17 @@ const styles = StyleSheet.create({
   },
   adminButton: {
     padding: 8,
+  },
+  userActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionButton: {
+    padding: 8,
+  },
+  deleteButton: {
+    backgroundColor: '#fff1f0',
+    borderRadius: 8,
   },
 }); 

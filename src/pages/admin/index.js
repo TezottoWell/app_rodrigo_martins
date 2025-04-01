@@ -74,6 +74,11 @@ export default function Admin() {
     navigation.navigate('EditWorkout');
   }
 
+  function handleTreinoModelo() {
+    console.log('Tentando navegar para TreinoModelo');
+    navigation.navigate('TreinoModelo');
+  }
+
   const handleSolicitacao = async (solicitacaoId, novoStatus, userId) => {
     try {
       setIsLoading(true);
@@ -122,6 +127,11 @@ export default function Admin() {
             <TouchableOpacity style={styles.actionButton} onPress={handleEditWorkout}>
               <MaterialIcons name="edit" size={28} color="#FFF" />
               <Text style={styles.buttonText}>Editar Treino</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionButton} onPress={handleTreinoModelo}>
+              <MaterialIcons name="library-books" size={28} color="#FFF" />
+              <Text style={styles.buttonText}>Treino Modelo</Text>
             </TouchableOpacity>
           </View>
           

@@ -5,6 +5,7 @@ import { CommonActions } from '@react-navigation/native';
 import Home from '../pages/home';
 import Treinos from '../pages/treinos';
 import Financeiro from '../pages/financeiro';
+import Account from '../pages/account';
 
 const Tab = createBottomTabNavigator();
 
@@ -20,15 +21,15 @@ export function AppRoutes(){
           paddingBottom: 5,
           paddingTop: 5,
         },
-        tabBarActiveTintColor: '#FFF',
-        tabBarInactiveTintColor: '#8F8F8F',
+        tabBarActiveTintColor: '#FFD700',
+        tabBarInactiveTintColor: '#FFF',
         gestureEnabled: false,
         headerLeft: () => null,
       }}
       backBehavior="none"
     >
       <Tab.Screen 
-        name="Home"
+        name="Início"
         component={Home}
         options={{
           tabBarIcon: ({ color, size }) => (
@@ -54,6 +55,16 @@ export function AppRoutes(){
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="attach-money" size={size} color={color} />
           )
+        }}
+      />
+
+      <Tab.Screen
+        name="Conta"
+        component={Account}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="person" size={size} color={color} />
+          ),
         }}
       />
     </Tab.Navigator>

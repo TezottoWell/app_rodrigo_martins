@@ -1,4 +1,4 @@
-package com.seuapp.nome
+package com.welldev.teamrodrigomartins
 
 import android.os.Build
 import android.os.Bundle

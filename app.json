@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "team-Rodrigo-Martins",
+    "name": "Team Rodrigo Martins",
     "slug": "team-rodrigo-martins",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.well-dev.team-rodrigo-martins",
-      "buildNumber": "2",
+      "buildNumber": "8",
       "infoPlist": {
         "UIViewControllerBasedStatusBarAppearance": false,
         "NSFaceIDUsageDescription": "Este aplicativo precisa usar o Face ID para autenticação segura",
@@ -31,6 +31,9 @@
       },
       "config": {
         "usesNonExemptEncryption": false
+      },
+      "runtimeVersion": {
+        "policy": "appVersion"
       }
     },
     "android": {
@@ -39,12 +42,17 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.welldev.teamrodrigomartins",
+      "versionCode": 2,
       "permissions": [
         "android.permission.USE_BIOMETRIC",
         "android.permission.USE_FINGERPRINT",
         "android.permission.RECORD_AUDIO",
         "android.permission.ACTIVITY_RECOGNITION"
-      ]
+      ],
+      "runtimeVersion": "1.0.0",
+      "config": {
+        "googleMobileAdsAppId": "ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -80,6 +88,9 @@
         "projectId": "00a29f85-11f2-432c-a291-9834002a36d4"
       }
     },
-    "owner": "lui_zwellington"
+    "owner": "lui_zwellington",
+    "updates": {
+      "url": "https://u.expo.dev/00a29f85-11f2-432c-a291-9834002a36d4"
+    }
   }
 }

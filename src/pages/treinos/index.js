@@ -233,24 +233,27 @@ export default function Treinos({ route }) {
     setTempoInicio(null);
   }
 
-  function selecionarDia(dia) {
+  const selecionarDia = (dia) => {
     setDiaAtual(dia);
     setExerciciosRestantes(treinoSelecionado.treinos[dia]);
-    setContadorAtivo(true);
-    setContadorInicio(5);
     
-    const intervalId = setInterval(() => {
-      setContadorInicio((prev) => {
-        if (prev <= 1) {
-          clearInterval(intervalId);
-          setContadorAtivo(false);
-          setTempoInicio(new Date());
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  }
+    if (!diasConcluidos.includes(dia)) {
+      setContadorAtivo(true);
+      setContadorInicio(5);
+      
+      const intervalId = setInterval(() => {
+        setContadorInicio((prev) => {
+          if (prev <= 1) {
+            clearInterval(intervalId);
+            setContadorAtivo(false);
+            setTempoInicio(new Date());
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+  };
 
   function concluirExercicio(exercicio, index) {
     const novosExerciciosRestantes = exerciciosRestantes.filter((_, i) => i !== index);
@@ -372,9 +375,12 @@ export default function Treinos({ route }) {
 
     return (
       <View style={styles.diasContainer}>
-        <Text style={styles.sectionTitle}>
-          Selecione o dia do treino:
-        </Text>
+        <View style={styles.sectionTitleContainer}>
+          <MaterialIcons name="event" size={24} color="#1a1a1a" />
+          <Text style={styles.sectionTitle}>
+            {diaAtual ? getDiaSemana(Number(diaAtual)) : 'Selecione o dia do treino'}
+          </Text>
+        </View>
         <View style={styles.diasOptions}>
           {Object.keys(treinoSelecionado.treinos).map((dia) => (
             <TouchableOpacity
@@ -386,17 +392,41 @@ export default function Treinos({ route }) {
               onPress={() => selecionarDia(dia)}
             >
               <View style={styles.diaButtonContent}>
-                <MaterialIcons 
-                  name="event" 
-                  size={24} 
-                  color={diaAtual === dia ? '#FFF' : '#666'} 
-                />
-                <Text style={[
-                  styles.diaButtonText,
-                  diaAtual === dia && styles.diaButtonTextSelected
-                ]}>
-                  Dia {dia}
-                </Text>
+                <View style={styles.diaHeaderContainer}>
+                  <MaterialIcons 
+                    name="event" 
+                    size={20} 
+                    color={diaAtual === dia ? '#FFF' : '#666'} 
+                  />
+                  <Text style={[
+                    styles.diaButtonText,
+                    diaAtual === dia && styles.diaButtonTextSelected
+                  ]}>{getDiaSemana(Number(dia))}</Text>
+                </View>
+                
+                {treinoSelecionado.treinos[dia]?.length > 0 && (
+                  <>
+                    <Text style={[
+                      styles.exerciciosCount,
+                      diaAtual === dia && styles.exerciciosCountSelected
+                    ]}>
+                      {treinoSelecionado.treinos[dia].length} exercício(s)
+                    </Text>
+                    <View style={styles.grupamentosContainer}>
+                      {getGrupamentosUnicos(treinoSelecionado.treinos[dia]).map((grupamento, index) => (
+                        <Text 
+                          key={index} 
+                          style={[
+                            styles.grupamentoTag,
+                            diaAtual === dia && styles.grupamentoTagSelected
+                          ]}
+                        >
+                          {grupamento}
+                        </Text>
+                      ))}
+                    </View>
+                  </>
+                )}
                 {diasConcluidos.includes(dia) && (
                   <MaterialIcons 
                     name="check-circle" 
@@ -406,12 +436,6 @@ export default function Treinos({ route }) {
                   />
                 )}
               </View>
-              <Text style={[
-                styles.exerciciosCount,
-                diaAtual === dia && styles.exerciciosCountSelected
-              ]}>
-                {treinoSelecionado.treinos[dia].length} exercícios
-              </Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -664,6 +688,36 @@ export default function Treinos({ route }) {
     treinos.sort((a, b) => b.dataCreated.toDate() - a.dataCreated.toDate()),
     [treinos]
   );
+
+  const getDiaSemana = (numero) => {
+    const diasSemana = {
+      1: 'Segunda-Feira',
+      2: 'Terça-Feira',
+      3: 'Quarta-Feira',
+      4: 'Quinta-Feira',
+      5: 'Sexta-Feira',
+      6: 'Sábado',
+      7: 'Domingo'
+    };
+    return diasSemana[numero];
+  };
+
+  const getGrupamentosUnicos = (exercicios) => {
+    const grupamentos = exercicios.reduce((acc, exercicio) => {
+      if (exercicio.tipo === 'combinado') {
+        // Para exercícios combinados, pega os grupamentos de cada exercício interno
+        exercicio.exercicios.forEach(ex => {
+          acc.add(ex.grupamentoMuscular);
+        });
+      } else {
+        // Para exercícios normais, adiciona o grupamento diretamente
+        acc.add(exercicio.grupamentoMuscular);
+      }
+      return acc;
+    }, new Set());
+
+    return Array.from(grupamentos);
+  };
 
   if (isLoading) {
     return (
@@ -962,13 +1016,17 @@ const styles = StyleSheet.create({
     margin: 10,
     paddingBottom: 10,
   },
+  sectionTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 15,
+    paddingHorizontal: 10,
+  },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 15,
     color: '#1a1a1a',
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   diasOptions: {
     flexDirection: 'row',
@@ -989,12 +1047,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   diaButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginBottom: 4,
     width: '100%',
+    gap: 8,
+    alignItems: 'flex-start',
   },
   diaButtonText: {
     color: '#666',
@@ -1130,10 +1185,8 @@ const styles = StyleSheet.create({
     transform: [{ translateY: 0 }],
   },
   exerciciosCount: {
-    color: '#666',
     fontSize: 14,
-    marginTop: 5,
-    textAlign: 'center',
+    color: '#666',
   },
   exerciciosCountSelected: {
     color: '#FFF',
@@ -1256,5 +1309,28 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     padding: 8,
+  },
+  grupamentosContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  grupamentoTag: {
+    backgroundColor: '#f0f0f0',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    fontSize: 12,
+    color: '#666',
+  },
+  grupamentoTagSelected: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    color: '#fff',
+  },
+  diaHeaderContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
   },
 }); 

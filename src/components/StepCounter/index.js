@@ -104,7 +104,7 @@ export default function StepCounter() {
     return (
       <View style={styles.container}>
         <Text style={styles.errorText}>
-          {error || 'Pedômetro não disponível neste dispositivo'}
+          {error || 'Pedômetro não disponível neste dispositivo, Verifique na configuração do dispositivo se o sensor está habilitado'}
         </Text>
       </View>
     );

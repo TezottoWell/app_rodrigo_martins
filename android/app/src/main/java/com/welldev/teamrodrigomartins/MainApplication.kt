@@ -1,4 +1,4 @@
-package com.seuapp.nome
+package com.welldev.teamrodrigomartins
 
 import android.app.Application
 import android.content.res.Configuration
